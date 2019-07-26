@@ -58,6 +58,7 @@
 #include "isisd/isis_adjacency.h"
 #include "isisd/isis_spf.h"
 #include "isisd/isis_te.h"
+#include "isisd/isis_sr.h"
 #include "isisd/isis_zebra.h"
 
 const char *mode2text[] = {"Disable", "Area", "AS", "Emulate"};
@@ -239,8 +240,13 @@ void isis_link_params_update(struct isis_circuit *circuit,
 	} else {
 		zlog_debug("  |- Reset Extended subTLVs status 0x%x",
 			   ext->status);
-		/* Reset TE subTLVs */
-		ext->status = 0;
+		/* Reset TE subTLVs keeping SR one's */
+		if (IS_SUBTLV(ext, EXT_ADJ_SID))
+			ext->status = EXT_ADJ_SID;
+		else if (IS_SUBTLV(ext, EXT_LAN_ADJ_SID))
+			ext->status = EXT_LAN_ADJ_SID;
+		else
+			ext->status = 0;
 	}
 
 	return;
@@ -252,7 +258,7 @@ static int isis_link_update_adj_hook(struct isis_adjacency *adj)
 	struct isis_circuit *circuit = adj->circuit;
 
 	/* Update MPLS TE Remote IP address parameter if possible */
-	if (!IS_MPLS_TE(circuit->area->mta))
+	if (!IS_MPLS_TE(circuit->area->mta) || !IS_EXT_TE(circuit->ext))
 		return 0;
 
 	/* IPv4 first */
@@ -497,7 +503,8 @@ DEFUN (show_isis_mpls_te_interface,
 void isis_mpls_te_init(void)
 {
 
-	/* Register Adjacency hook */
+	/* Register Circuit and Adjacency hook */
+	hook_register(isis_if_new_hook, isis_mpls_te_update);
 	hook_register(isis_adj_state_change_hook, isis_link_update_adj_hook);
 
 

@@ -175,6 +175,7 @@ static void adjinfo2nexthop(struct list *nexthops, struct isis_adjacency *adj)
 			nh = isis_nexthop_create(
 				ipv4_addr, adj->circuit->interface->ifindex);
 			nh->router_address = adj->router_address;
+			nh->adj = adj;
 			listnode_add(nexthops, nh);
 			return;
 		}
@@ -192,6 +193,7 @@ static void adjinfo2nexthop6(struct list *nexthops6, struct isis_adjacency *adj)
 			nh6 = isis_nexthop6_create(
 				ipv6_addr, adj->circuit->interface->ifindex);
 			nh6->router_address6 = adj->router_address6;
+			nh6->adj = adj;
 			listnode_add(nexthops6, nh6);
 			return;
 		}
@@ -379,7 +381,7 @@ struct isis_route_info *isis_route_create(struct prefix *prefix,
 	return route_info;
 }
 
-static void isis_route_delete(struct route_node *rode,
+static void isis_route_delete(struct isis_area *area, struct route_node *rode,
 			      struct route_table *table)
 {
 	struct isis_route_info *rinfo;
@@ -406,7 +408,7 @@ static void isis_route_delete(struct route_node *rode,
 		UNSET_FLAG(rinfo->flag, ISIS_ROUTE_FLAG_ACTIVE);
 		if (isis->debugs & DEBUG_RTE_EVENTS)
 			zlog_debug("ISIS-Rte: route delete  %s", buff);
-		isis_zebra_route_update(prefix, src_p, rinfo);
+		isis_zebra_route_update(area, prefix, src_p, rinfo);
 	}
 	isis_route_info_delete(rinfo);
 	rode->info = NULL;
@@ -453,7 +455,7 @@ static void _isis_route_verify_table(struct isis_area *area,
 				buff);
 		}
 
-		isis_zebra_route_update(dst_p, src_p, rinfo);
+		isis_zebra_route_update(area, dst_p, src_p, rinfo);
 
 		if (CHECK_FLAG(rinfo->flag, ISIS_ROUTE_FLAG_ACTIVE))
 			continue;
@@ -462,7 +464,7 @@ static void _isis_route_verify_table(struct isis_area *area,
 		 * directly for
 		 * validating => no problems with deleting routes. */
 		if (!tables) {
-			isis_route_delete(rnode, table);
+			isis_route_delete(area, rnode, table);
 			continue;
 		}
 
@@ -485,7 +487,7 @@ static void _isis_route_verify_table(struct isis_area *area,
 			route_unlock_node(drnode);
 		}
 
-		isis_route_delete(rnode, table);
+		isis_route_delete(area, rnode, table);
 	}
 }
 

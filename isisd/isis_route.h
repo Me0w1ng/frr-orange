@@ -29,6 +29,7 @@ struct isis_nexthop6 {
 	ifindex_t ifindex;
 	struct in6_addr ip6;
 	struct in6_addr router_address6;
+	struct isis_adjacency *adj;
 	unsigned int lock;
 };
 
@@ -36,6 +37,7 @@ struct isis_nexthop {
 	ifindex_t ifindex;
 	struct in_addr ip;
 	struct in_addr router_address;
+	struct isis_adjacency *adj;
 	unsigned int lock;
 };
 
@@ -49,6 +51,11 @@ struct isis_route_info {
 	struct list *nexthops;
 	struct list *nexthops6;
 };
+
+DECLARE_HOOK(isis_route_update_hook,
+	    (struct isis_area *area, struct prefix *prefix,
+	     struct isis_route_info *route_info),
+	    (area, prefix, route_info))
 
 struct isis_route_info *isis_route_create(struct prefix *prefix,
 					  struct prefix_ipv6 *src_p,
