@@ -61,6 +61,9 @@
 
 DEFINE_QOBJ_TYPE(isis_circuit)
 
+DEFINE_HOOK(isis_circuit_type_update_hook, (struct isis_circuit *circuit),
+	    (circuit))
+
 /*
  * Prototypes.
  */
@@ -135,7 +138,12 @@ struct isis_circuit *isis_circuit_new(void)
 	}
 #endif /* ifndef FABRICD */
 
-	circuit->mtc = mpls_te_circuit_new();
+	/* Extended subTLVs and Prefix SID are initialized latter
+	 *  - TE extended subTLVs when MPLS-TE is activated
+	 *  - Adjacent SID subTLVs and Prefix SID when SR is activated
+	 */
+	circuit->ext = NULL;
+	circuit->pref_sid = NULL;
 
 	circuit_mt_init(circuit);
 
@@ -266,8 +274,11 @@ void isis_circuit_add_addr(struct isis_circuit *circuit,
 		ipv4->prefix = connected->address->u.prefix4;
 		listnode_add(circuit->ip_addrs, ipv4);
 
-		/* Update MPLS TE Local IP address parameter */
-		set_circuitparams_local_ipaddr(circuit->mtc, ipv4->prefix);
+		/* Update Local IP address parameter if MPLS TE is enable */
+		if (circuit->ext && IS_MPLS_TE(circuit->ext)) {
+			circuit->ext->local_addr.s_addr = ipv4->prefix.s_addr;
+			SET_SUBTLV(circuit->ext, EXT_LOCAL_ADDR);
+		}
 
 		if (circuit->area)
 			lsp_regenerate_schedule(circuit->area, circuit->is_type,
@@ -478,6 +489,8 @@ void isis_circuit_if_add(struct isis_circuit *circuit, struct interface *ifp)
 
 	for (ALL_LIST_ELEMENTS(ifp->connected, node, nnode, conn))
 		isis_circuit_add_addr(circuit, conn);
+
+	hook_call(isis_circuit_type_update_hook, circuit);
 }
 
 void isis_circuit_if_del(struct isis_circuit *circuit, struct interface *ifp)
@@ -521,7 +534,6 @@ void isis_circuit_if_bind(struct isis_circuit *circuit, struct interface *ifp)
 		assert(ifp->info == circuit);
 	else
 		ifp->info = circuit;
-	isis_link_params_update(circuit, ifp);
 }
 
 void isis_circuit_if_unbind(struct isis_circuit *circuit, struct interface *ifp)
@@ -1353,6 +1365,8 @@ void isis_circuit_circ_type_set(struct isis_circuit *circuit, int circ_type)
 		circuit->circ_type_config = circ_type;
 		isis_csm_state_change(ISIS_ENABLE, circuit, area);
 	}
+
+	hook_call(isis_circuit_type_update_hook, circuit);
 }
 
 int isis_circuit_mt_enabled_set(struct isis_circuit *circuit, uint16_t mtid,

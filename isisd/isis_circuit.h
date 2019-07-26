@@ -26,6 +26,7 @@
 #include "vty.h"
 #include "if.h"
 #include "qobj.h"
+#include "hook.h"
 #include "prefix.h"
 #include "ferr.h"
 
@@ -121,7 +122,8 @@ struct isis_circuit {
 	uint16_t psnp_interval[2];    /* psnp-interval in seconds */
 	uint8_t metric[2];
 	uint32_t te_metric[2];
-	struct mpls_te_circuit *mtc; /* MPLS-TE parameters */
+	struct isis_ext_subtlvs *ext; /* Extended parameters (TE + Adj SID */
+	struct isis_prefix_sid *pref_sid; /* Node SID */
 	int ip_router;  /* Route IP ? */
 	int is_passive; /* Is Passive ? */
 	struct list *mt_settings;   /* IS-IS MT Settings */
@@ -148,6 +150,9 @@ struct isis_circuit {
 	QOBJ_FIELDS
 };
 DECLARE_QOBJ_TYPE(isis_circuit)
+
+DECLARE_HOOK(isis_circuit_type_update_hook, (struct isis_circuit *circuit),
+	     (circuit))
 
 void isis_circuit_init(void);
 struct isis_circuit *isis_circuit_new(void);
