@@ -1752,82 +1752,113 @@ static void zread_vrf_unregister(ZAPI_HANDLER_ARGS)
 static void zread_mpls_labels(ZAPI_HANDLER_ARGS)
 {
 	struct stream *s;
+	uint8_t message;
 	enum lsp_types_t type;
 	struct prefix prefix;
-	enum nexthop_types_t gtype;
-	union g_addr gate;
-	ifindex_t ifindex;
+	enum nexthop_types_t nh_type = 0;
+	union g_addr gate = {};
+	ifindex_t ifindex = 0;
 	mpls_label_t in_label, out_label;
-	uint8_t distance;
+	uint8_t route_type = 0;
+	unsigned short route_instance = 0;
 
 	/* Get input stream.  */
 	s = msg;
 
 	/* Get data. */
-	STREAM_GETC(s, type);
-	STREAM_GETL(s, prefix.family);
-	switch (prefix.family) {
-	case AF_INET:
-		STREAM_GET(&prefix.u.prefix4.s_addr, s, IPV4_MAX_BYTELEN);
-		STREAM_GETC(s, prefix.prefixlen);
-		if (prefix.prefixlen > IPV4_MAX_BITLEN) {
-			zlog_debug(
-				"%s: Specified prefix length %d is greater than a v4 address can support",
-				__PRETTY_FUNCTION__, prefix.prefixlen);
-			return;
-		}
-		STREAM_GET(&gate.ipv4.s_addr, s, IPV4_MAX_BYTELEN);
-		break;
-	case AF_INET6:
-		STREAM_GET(&prefix.u.prefix6, s, 16);
-		STREAM_GETC(s, prefix.prefixlen);
-		if (prefix.prefixlen > IPV6_MAX_BITLEN) {
-			zlog_debug(
-				"%s: Specified prefix length %d is greater than a v6 address can support",
-				__PRETTY_FUNCTION__, prefix.prefixlen);
-			return;
-		}
-		STREAM_GET(&gate.ipv6, s, 16);
-		break;
-	default:
-		zlog_debug("%s: Specified AF %d is not supported for this call",
-			   __PRETTY_FUNCTION__, prefix.family);
+	STREAM_GETC(s, message);
+	if (hdr->command == ZEBRA_MPLS_LABELS_ADD
+	    && !CHECK_FLAG(message, ZAPI_LABELS_NEXTHOP)) {
+		zlog_debug(
+			"%s: missing nexthop for ZEBRA_MPLS_LABELS_ADD message",
+			__func__);
 		return;
 	}
-	STREAM_GETL(s, ifindex);
-	STREAM_GETC(s, distance);
+
+	STREAM_GETC(s, type);
+
+	if (CHECK_FLAG(message, ZAPI_LABELS_FTN)) {
+		size_t psize;
+
+		STREAM_GETW(s, prefix.family);
+		STREAM_GETC(s, prefix.prefixlen);
+
+		psize = PSIZE(prefix.prefixlen);
+		switch (prefix.family) {
+		case AF_INET:
+			if (prefix.prefixlen > IPV4_MAX_BITLEN) {
+				zlog_debug(
+					"%s: Specified prefix length %d is greater than a v4 address can support",
+					__PRETTY_FUNCTION__, prefix.prefixlen);
+				return;
+			}
+			STREAM_GET(&prefix.u.prefix4.s_addr, s, psize);
+			break;
+		case AF_INET6:
+			if (prefix.prefixlen > IPV6_MAX_BITLEN) {
+				zlog_debug(
+					"%s: Specified prefix length %d is greater than a v6 address can support",
+					__PRETTY_FUNCTION__, prefix.prefixlen);
+				return;
+			}
+			STREAM_GET(&prefix.u.prefix6, s, psize);
+			break;
+		default:
+			break;
+		}
+
+		STREAM_GETC(s, route_type);
+		STREAM_GETW(s, route_instance);
+	}
+
+	if (CHECK_FLAG(message, ZAPI_LABELS_NEXTHOP)) {
+		int nh_family;
+
+		STREAM_GETC(s, nh_type);
+		STREAM_GETW(s, nh_family);
+		switch (nh_family) {
+		case AF_INET:
+			STREAM_GET(&gate.ipv4.s_addr, s, IPV4_MAX_BYTELEN);
+			break;
+		case AF_INET6:
+			STREAM_GET(&gate.ipv6, s, 16);
+			break;
+		default:
+			break;
+		}
+		STREAM_GETL(s, ifindex);
+	}
+
 	STREAM_GETL(s, in_label);
 	STREAM_GETL(s, out_label);
-
-	switch (prefix.family) {
-	case AF_INET:
-		if (ifindex)
-			gtype = NEXTHOP_TYPE_IPV4_IFINDEX;
-		else
-			gtype = NEXTHOP_TYPE_IPV4;
-		break;
-	case AF_INET6:
-		if (ifindex)
-			gtype = NEXTHOP_TYPE_IPV6_IFINDEX;
-		else
-			gtype = NEXTHOP_TYPE_IPV6;
-		break;
-	default:
-		return;
-	}
 
 	if (!mpls_enabled)
 		return;
 
 	if (hdr->command == ZEBRA_MPLS_LABELS_ADD) {
-		mpls_lsp_install(zvrf, type, in_label, out_label, gtype, &gate,
-				 ifindex);
-		mpls_ftn_update(1, zvrf, type, &prefix, gtype, &gate, ifindex,
-				distance, out_label);
+		mpls_lsp_install(zvrf, type, in_label, out_label, nh_type,
+				 &gate, ifindex);
+
+		if (CHECK_FLAG(message, ZAPI_LABELS_FTN))
+			mpls_ftn_update(1, zvrf, type, &prefix, nh_type, &gate,
+					ifindex, route_type, route_instance,
+					out_label);
 	} else if (hdr->command == ZEBRA_MPLS_LABELS_DELETE) {
-		mpls_lsp_uninstall(zvrf, type, in_label, gtype, &gate, ifindex);
-		mpls_ftn_update(0, zvrf, type, &prefix, gtype, &gate, ifindex,
-				distance, out_label);
+		if (CHECK_FLAG(message, ZAPI_LABELS_NEXTHOP)) {
+			mpls_lsp_uninstall(zvrf, type, in_label, nh_type, &gate,
+					   ifindex);
+
+			if (CHECK_FLAG(message, ZAPI_LABELS_FTN))
+				mpls_ftn_update(0, zvrf, type, &prefix, nh_type,
+						&gate, ifindex, route_type,
+						route_instance, out_label);
+		} else {
+			mpls_lsp_uninstall_all_vrf(zvrf, type, in_label);
+
+			if (CHECK_FLAG(message, ZAPI_LABELS_FTN))
+				mpls_ftn_uninstall(zvrf, type, &prefix,
+						   route_type, route_instance);
+		}
 	}
 stream_failure:
 	return;

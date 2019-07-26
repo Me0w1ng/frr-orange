@@ -618,17 +618,17 @@ def test_mpls_table():
         refTableFile = '%s/r%s/show_mpls_table.ref%s' % (thisDir, i, version)
         if os.path.isfile(refTableFile):
             # Read expected result from file
-            expected = open(refTableFile).read().rstrip()
+            expected = open(refTableFile).read()
             # Fix newlines (make them all the same)
             expected = ('\n'.join(expected.splitlines()) + '\n').splitlines(1)
 
             # Actual output from router
-            actual = net['r%s' % i].cmd('vtysh -c "show mpls table" 2> /dev/null').rstrip()
+            actual = net['r%s' % i].cmd('vtysh -c "show mpls table" 2> /dev/null')
  
             # Fix inconsistent Label numbers at beginning of line
             actual = re.sub(r"(\s+)[0-9]+(\s+LDP)", r"\1XX\2", actual)
             # Fix inconsistent Label numbers at end of line
-            actual = re.sub(r"(\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\s+)[0-9][0-9]", r"\1XX", actual)
+            actual = re.sub(r"(\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\sif\s[0-9]+\s+)[0-9][0-9](\s+)", r"\1XX\2", actual)
 
             # Fix newlines (make them all the same)
             actual = ('\n'.join(actual.splitlines()) + '\n').splitlines(1)

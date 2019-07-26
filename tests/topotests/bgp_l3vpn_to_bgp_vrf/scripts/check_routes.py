@@ -131,9 +131,9 @@ else:
 # PE routers: exporting vrfs set MPLS vrf labels in kernel
 ########################################################################
 
-luCommand('r1','vtysh -c "show mpls table"',' 101 *BGP *r1-cust1','pass','vrf labels')
-luCommand('r3','vtysh -c "show mpls table"',' 103 *BGP *r3-cust1','pass','vrf labels')
-luCommand('r4','vtysh -c "show mpls table"',' 1041 *BGP *r4-cust1 .*1042 *BGP *r4-cust2','pass','vrf labels')
+luCommand('r1','vtysh -c "show mpls table"',' 101 *BGP *if 4','pass','vrf labels')
+luCommand('r3','vtysh -c "show mpls table"',' 103 *BGP *if 5','pass','vrf labels')
+luCommand('r4','vtysh -c "show mpls table"',' 1041 *BGP *if 5 .*1042 *BGP *if 6','pass','vrf labels')
 
 ########################################################################
 # Core VPN router: all customer routes

@@ -395,6 +395,26 @@ struct zapi_route {
 	uint32_t tableid;
 };
 
+struct zapi_labels {
+	enum lsp_types_t type;
+	uint8_t message;
+#define ZAPI_LABELS_FTN      0x01
+#define ZAPI_LABELS_NEXTHOP  0x02
+	struct {
+		struct prefix prefix;
+		uint8_t type;
+		unsigned short instance;
+	} route;
+	struct {
+		enum nexthop_types_t type;
+		int family;
+		union g_addr address;
+		ifindex_t ifindex;
+	} nexthop;
+	mpls_label_t local_label;
+	mpls_label_t remote_label;
+};
+
 struct zapi_pw {
 	char ifname[IF_NAMESIZE];
 	ifindex_t ifindex;
@@ -625,6 +645,8 @@ extern int tm_get_table_chunk(struct zclient *zclient, uint32_t chunk_size,
 extern int tm_release_table_chunk(struct zclient *zclient, uint32_t start,
 				  uint32_t end);
 
+extern int zebra_send_mpls_labels(struct zclient *zclient, int cmd,
+				  struct zapi_labels *zl);
 extern int zebra_send_pw(struct zclient *zclient, int command,
 			 struct zapi_pw *pw);
 extern void zebra_read_pw_status_update(ZAPI_CALLBACK_ARGS, struct zapi_pw_status *pw);

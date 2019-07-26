@@ -2363,6 +2363,51 @@ int tm_release_table_chunk(struct zclient *zclient, uint32_t start,
 	return zclient_send_message(zclient);
 }
 
+int zebra_send_mpls_labels(struct zclient *zclient, int cmd,
+			   struct zapi_labels *zl)
+{
+	struct stream *s;
+
+	/* Reset stream. */
+	s = zclient->obuf;
+	stream_reset(s);
+
+	zclient_create_header(s, cmd, VRF_DEFAULT);
+	stream_putc(s, zl->message);
+	stream_putc(s, zl->type);
+
+	if (CHECK_FLAG(zl->message, ZAPI_LABELS_FTN)) {
+		stream_putw(s, zl->route.prefix.family);
+		stream_put_prefix(s, &zl->route.prefix);
+		stream_putc(s, zl->route.type);
+		stream_putw(s, zl->route.instance);
+	}
+
+	if (CHECK_FLAG(zl->message, ZAPI_LABELS_NEXTHOP)) {
+		stream_putc(s, zl->nexthop.type);
+		stream_putw(s, zl->nexthop.family);
+		switch (zl->nexthop.family) {
+		case AF_INET:
+			stream_put_in_addr(s, &zl->nexthop.address.ipv4);
+			break;
+		case AF_INET6:
+			stream_write(s, (uint8_t *)&zl->nexthop.address.ipv6,
+				     16);
+			break;
+		default:
+			break;
+		}
+		stream_putl(s, zl->nexthop.ifindex);
+	}
+
+	stream_putl(s, zl->local_label);
+	stream_putl(s, zl->remote_label);
+
+	/* Put length at the first point of the stream. */
+	stream_putw_at(s, 0, stream_get_endp(s));
+
+	return zclient_send_message(zclient);
+}
 
 int zebra_send_pw(struct zclient *zclient, int command, struct zapi_pw *pw)
 {
